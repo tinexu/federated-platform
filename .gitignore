@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Data
+data/
+*.pth
+*.pkl
+*.h5
+
+# Logs
+logs/
+runs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+experiments/results/
+checkpoints/
+model_weights/
