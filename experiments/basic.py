@@ -1,5 +1,6 @@
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server.server import FederatedServer
 from clients.client import FederatedClient
@@ -7,11 +8,11 @@ from common.data_utils import get_mnist_data, split_data_for_clients, get_client
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
-def run_federated_learning(num_clients=5, num_rounds=10, local_epochs=5, batch_size=32):
+def run_federated_learning(num_clients=5, num_rounds=10, local_epochs=5, batch_size=32, non_iid=True):
     """Run a complete federated learning simulation"""
     
     print("=== Federated Learning Experiment ===")
-    print(f"Clients: {num_clients}, Rounds: {num_rounds}, Local Epochs: {local_epochs}")
+    print(f"Clients: {num_clients}, Rounds: {num_rounds}, Local Epochs: {local_epochs}, Non-IID: {non_iid}")
     
     # Step 1: Prepare data
     print("\n1. Loading MNIST dataset...")
@@ -20,9 +21,10 @@ def run_federated_learning(num_clients=5, num_rounds=10, local_epochs=5, batch_s
     # Create test loader for global evaluation
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-    # Split training data among clients (non-IID)
-    print("2. Splitting data among clients (non-IID)...")
-    client_indices = split_data_for_clients(train_dataset, num_clients, non_iid=True)
+    # Split training data among clients
+    distribution_type = "non-IID" if non_iid else "IID"
+    print(f"2. Splitting data among clients ({distribution_type})...")
+    client_indices = split_data_for_clients(train_dataset, num_clients, non_iid=non_iid)
     
     # Step 2: Initialize server and clients
     print("3. Initializing server and clients...")
@@ -74,15 +76,16 @@ def run_federated_learning(num_clients=5, num_rounds=10, local_epochs=5, batch_s
         
         print(f"\nGlobal Model - Accuracy: {global_metrics['accuracy']:.2f}%, Loss: {global_metrics['loss']:.4f}")
     
-    # Plot results
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(1, num_rounds + 1), global_accuracy_history, 'b-', linewidth=2)
-    plt.xlabel('Round')
-    plt.ylabel('Global Model Accuracy (%)')
-    plt.title('Federated Learning Progress')
-    plt.grid(True)
-    plt.savefig('federated_learning_results.png')
-    plt.show()
+    # Don't show plot when called from other experiments
+    if __name__ == "__main__":
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(1, num_rounds + 1), global_accuracy_history, 'b-', linewidth=2)
+        plt.xlabel('Round')
+        plt.ylabel('Global Model Accuracy (%)')
+        plt.title('Federated Learning Progress')
+        plt.grid(True)
+        plt.savefig('federated_learning_results.png')
+        plt.show()
     
     print("\n=== Experiment Complete ===")
     print(f"Final Global Accuracy: {global_accuracy_history[-1]:.2f}%")
@@ -95,5 +98,6 @@ if __name__ == "__main__":
         num_clients=5,
         num_rounds=10,
         local_epochs=5,
-        batch_size=32
+        batch_size=32,
+        non_iid=True
     )
