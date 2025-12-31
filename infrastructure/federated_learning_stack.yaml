@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Distributed Federated Learning Platform'
+
+Parameters:
+  ModelBucketName:
+    Type: String
+    Default: fed-learn-models-1w4zzxzc
+    
+Resources:
+  # API Gateway for Server
+  FederatedAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: federated-learning-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: ['GET', 'POST', 'PUT']
+        AllowHeaders: ['Content-Type', 'Authorization']
+
+  # Lambda Function for Serverless FL Server
+  ServerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: fl-server-coordinator
+      Runtime: python3.9
+      Handler: lambda_function.handler
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import uuid
+          from datetime import datetime
+          
+          s3 = boto3.client('s3')
+          dynamodb = boto3.resource('dynamodb')
+          ecs = boto3.client('ecs')
+          
+          def handler(event, context):
+              path = event['rawPath']
+              method = event['requestMethod']
+              
+              if path == '/start_round' and method == 'POST':
+                  return start_federated_round(event)
+              elif path == '/status' and method == 'GET':
+                  return get_system_status()
+              else:
+                  return {'statusCode': 404}
+                  
+          def start_federated_round(event):
+              round_id = str(uuid.uuid4())[:8]
+              
+              # Trigger ECS tasks in multiple regions
+              regions = ['us-east-1', 'us-west-2', 'eu-west-1']
+              
+              for region in regions:
+                  ecs_regional = boto3.client('ecs', region_name=region)
+                  
+                  # Start 2 clients per region
+                  for i in range(2):
+                      response = ecs_regional.run_task(
+                          cluster=f'fl-cluster-{region}',
+                          taskDefinition='fl-client-task',
+                          launchType='FARGATE',
+                          networkConfiguration={
+                              'awsvpcConfiguration': {
+                                  'subnets': get_subnets(region),
+                                  'securityGroups': [get_security_group(region)],
+                                  'assignPublicIp': 'ENABLED'
+                              }
+                          },
+                          overrides={
+                              'containerOverrides': [{
+                                  'name': 'fl-client',
+                                  'environment': [
+                                      {'name': 'ROUND_ID', 'value': round_id},
+                                      {'name': 'CLIENT_ID', 'value': f'{region}-{i}'},
+                                      {'name': 'REGION', 'value': region}
+                                  ]
+                              }]
+                          }
+                      )
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'round_id': round_id,
+                      'regions': regions,
+                      'clients_per_region': 2,
+                      'total_clients': 6
+                  })
+              }
+      Environment:
+        Variables:
+          MODEL_BUCKET: !Ref ModelBucketName
+      Role: !GetAtt ServerLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 3008
+
+  # DynamoDB for Round Coordination
+  RoundTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: federated-rounds
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: round_id
+          AttributeType: S
+        - AttributeName: client_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: round_id
+          KeyType: HASH
+        - AttributeName: client_id
+          KeyType: RANGE
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  # SQS for Client Updates
+  ClientUpdateQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: fl-client-updates
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 86400
+
+  # CloudWatch Dashboard
+  FLDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: federated-learning-metrics
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["FL/Training", "ActiveClients", {"stat": "Sum"}],
+                  [".", "RoundsCompleted", {"stat": "Sum"}],
+                  [".", "ModelAccuracy", {"stat": "Average"}]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Federated Learning Metrics"
+              }
+            }
+          ]
+        }
+
+  # Auto Scaling for Client Fleet
+  ClientAutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: !Sub 'service/${ClusterName}/fl-client-service'
+      MinCapacity: 0
+      MaxCapacity: 20
+      RoleARN: !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService'
+
+  ClientScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: fl-client-scaling
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ClientAutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: 70
+
+Outputs:
+  APIEndpoint:
+    Value: !GetAtt FederatedAPI.ApiEndpoint
+    Description: API Gateway endpoint for federated learning

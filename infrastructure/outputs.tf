@@ -1,4 +1,3 @@
-# infrastructure/outputs.tf
 output "ecr_registry" {
   value = split("/", aws_ecr_repository.server.repository_url)[0]
 }
