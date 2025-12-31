@@ -1,0 +1,25 @@
+cluster_name = "fed-learn-cluster"
+ecr_client_url = "932459504153.dkr.ecr.us-east-1.amazonaws.com/fed-learn-client"
+ecr_registry = "932459504153.dkr.ecr.us-east-1.amazonaws.com"
+ecr_server_url = "932459504153.dkr.ecr.us-east-1.amazonaws.com/fed-learn-server"
+model_bucket = "fed-learn-models-1w4zzxzc"
+quick_start_commands = <<EOT
+
+=== Quick Start Commands ===
+
+1. Login to ECR:
+   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 932459504153.dkr.ecr.us-east-1.amazonaws.com
+
+2. Build and push server:
+   docker build -f Dockerfile.server -t 932459504153.dkr.ecr.us-east-1.amazonaws.com/fed-learn-server:latest .
+   docker push 932459504153.dkr.ecr.us-east-1.amazonaws.com/fed-learn-server:latest
+
+3. Build and push client:
+   docker build -f Dockerfile.client -t 932459504153.dkr.ecr.us-east-1.amazonaws.com/fed-learn-client:latest .
+   docker push 932459504153.dkr.ecr.us-east-1.amazonaws.com/fed-learn-client:latest
+
+4. S3 Bucket: fed-learn-models-1w4zzxzc
+
+
+EOT
+vpc_id = "vpc-0a51da7162ca8e9e3"
