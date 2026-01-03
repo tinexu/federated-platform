@@ -1,0 +1,156 @@
+# infrastructure/federated-learning-stack-fixed.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Distributed Federated Learning Platform'
+
+Parameters:
+  ModelBucketName:
+    Type: String
+    Default: fed-learn-models-global
+    
+Resources:
+  # VPC for networking
+  FederatedVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+
+  # Public Subnet
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FederatedVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnRoute: true
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref FederatedVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Route Table
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref FederatedVPC
+
+  Route:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref RouteTable
+
+  # Security Group
+  FLSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for FL tasks
+      VpcId: !Ref FederatedVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'fl-cluster-${AWS::Region}'
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+
+  # IAM Role for Lambda
+  ServerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ECSTaskPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                  - ecs:DescribeTasks
+                  - iam:PassRole
+                Resource: '*'
+
+  # Lambda Function for coordination
+  CoordinatorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'fl-coordinator-${AWS::Region}'
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt ServerLambdaRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          
+          ecs = boto3.client('ecs')
+          
+          def handler(event, context):
+              region = os.environ['AWS_REGION']
+              cluster = f'fl-cluster-{region}'
+              
+              # Simple health check
+              response = ecs.describe_clusters(clusters=[cluster])
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'region': region,
+                      'cluster': cluster,
+                      'status': 'active'
+                  })
+              }
+
+  # SQS Queue for updates
+  UpdateQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'fl-updates-${AWS::Region}'
+      VisibilityTimeout: 300
+
+Outputs:
+  ClusterName:
+    Value: !Ref ECSCluster
+    Description: ECS Cluster Name
+  QueueUrl:
+    Value: !Ref UpdateQueue
+    Description: SQS Queue URL
+  Region:
+    Value: !Ref AWS::Region
+    Description: Deployment Region

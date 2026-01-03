@@ -44,3 +44,10 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Lambda build artifacts / vendored deps
+lambda-package/
+lambda_package_build/
+build/
+dist/
+*.zip

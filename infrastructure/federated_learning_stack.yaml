@@ -5,6 +5,10 @@ Parameters:
   ModelBucketName:
     Type: String
     Default: fed-learn-models-1w4zzxzc
+
+  ClusterName:
+    Type: String
+    Default: fl-cluster
     
 Resources:
   # API Gateway for Server
@@ -17,6 +21,50 @@ Resources:
         AllowOrigins: ['*']
         AllowMethods: ['GET', 'POST', 'PUT']
         AllowHeaders: ['Content-Type', 'Authorization']
+
+  ServerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: fl-server-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: fl-server-inline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${ModelBucketName}"
+                  - !Sub "arn:aws:s3:::${ModelBucketName}/*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: !GetAtt RoundTable.Arn
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: "*"
+
 
   # Lambda Function for Serverless FL Server
   ServerLambda:
