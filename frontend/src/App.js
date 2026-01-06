@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import './App.css';
+import ProductionArchitecture from './components/ProductionArchitecture';
 
 function App() {
   return (
@@ -269,6 +270,7 @@ function Dashboard() {
             </div>
           </div>
         )}
+        <ProductionArchitecture />
       </div>
     );
   }
