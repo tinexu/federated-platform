@@ -1,0 +1,82 @@
+version: "3.8"
+
+# Federated Learning Local Simulation
+# Run: docker compose up --build
+# Stop: docker compose down
+
+x-client-common: &client-common
+  build:
+    context: .
+    dockerfile: Dockerfile.client
+  environment: &client-env
+    COORDINATOR_URL: "http://coordinator:5000"
+    LOCAL_EPOCHS: "5"
+    BATCH_SIZE: "32"
+    LEARNING_RATE: "0.01"
+    POLL_INTERVAL: "3"
+    DATA_DIR: "/data/mnist"
+  volumes:
+    - mnist-data:/data/mnist
+    - ./data/partitions:/partitions:ro
+  depends_on:
+    coordinator:
+      condition: service_started
+  networks:
+    - fl-net
+
+services:
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile.coordinator
+    environment:
+      NUM_CLIENTS: "5"
+      NUM_ROUNDS: "10"
+      COORDINATOR_PORT: "5000"
+      ROUND_TIMEOUT: "300"
+    ports:
+      - "5001:5000"
+    networks:
+      - fl-net
+
+  client-0:
+    <<: *client-common
+    environment:
+      <<: *client-env
+      CLIENT_ID: "client-0"
+      PARTITION_FILE: "/partitions/client-0.npy"
+
+  client-1:
+    <<: *client-common
+    environment:
+      <<: *client-env
+      CLIENT_ID: "client-1"
+      PARTITION_FILE: "/partitions/client-1.npy"
+
+  client-2:
+    <<: *client-common
+    environment:
+      <<: *client-env
+      CLIENT_ID: "client-2"
+      PARTITION_FILE: "/partitions/client-2.npy"
+
+  client-3:
+    <<: *client-common
+    environment:
+      <<: *client-env
+      CLIENT_ID: "client-3"
+      PARTITION_FILE: "/partitions/client-3.npy"
+
+  client-4:
+    <<: *client-common
+    environment:
+      <<: *client-env
+      CLIENT_ID: "client-4"
+      PARTITION_FILE: "/partitions/client-4.npy"
+
+volumes:
+  mnist-data:
+
+networks:
+  fl-net:
+    driver: bridge

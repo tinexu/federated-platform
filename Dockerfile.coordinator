@@ -8,8 +8,10 @@ ENV PYTHONPATH=/app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared library and client code
+# Copy shared library and coordinator code
 COPY common/ ./common/
-COPY clients/ ./clients/
+COPY coordinator/ ./coordinator/
 
-CMD ["python", "clients/client.py"]
+EXPOSE 5000
+
+CMD ["python", "coordinator/app.py"]

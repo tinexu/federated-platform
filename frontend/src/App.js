@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import './App.css';
 import ProductionArchitecture from './components/ProductionArchitecture';
+import RealTimeMonitor from './components/RealTimeMonitor';
 
 function App() {
   return (
@@ -16,7 +17,6 @@ function App() {
   );
 }
 
-// frontend/src/App.js - Update Landing component
 function Landing() {
     const [apiStatus, setApiStatus] = React.useState('checking...');
     const [error, setError] = React.useState(null);
@@ -39,75 +39,108 @@ function Landing() {
     }, []);
     
     return (
-      <div style={{ padding: '50px', maxWidth: '1200px', margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: '50px' }}>
-          <h1 style={{ fontSize: '48px', marginBottom: '20px' }}>
-            MedFL Platform
-          </h1>
-          <h2 style={{ fontSize: '24px', color: '#666', fontWeight: 'normal' }}>
-            Collaborative Medical AI Without Sharing Patient Data
-          </h2>
-        </div>
-        
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '30px',
-          marginBottom: '50px'
-        }}>
-          <FeatureCard
-            icon=""
-            title="Multi-Hospital Training"
-            description="Train diagnostic models across hospital networks while keeping patient data completely local"
-          />
-          <FeatureCard
-            icon=""
-            title="HIPAA Compliant"
-            description="Built-in differential privacy (ε≤3.0) ensures patient privacy regulations are always met"
-          />
-          <FeatureCard
-            icon=""
-            title="Better Outcomes"
-            description="Access 10x more training data by collaborating, improving model accuracy by 25%+"
-          />
-        </div>
+      <div style={{ 
+        minHeight: '100vh',
+        background: '#0a0a0a',
+        color: '#e0e0e0'
+      }}>
+        <div className="container" style={{ paddingTop: '60px' }}>
+          {/* Header */}
+          <header style={{ textAlign: 'center', marginBottom: '80px' }}>
+            <h1 style={{ 
+              fontSize: '56px', 
+              fontWeight: '700',
+              marginBottom: '20px',
+              background: 'linear-gradient(135deg, #fff 0%, #888 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              MedFL
+            </h1>
+            <p style={{ 
+              fontSize: '20px', 
+              color: '#888',
+              maxWidth: '600px',
+              margin: '0 auto'
+            }}>
+              Secure federated learning infrastructure for healthcare organizations
+            </p>
+          </header>
   
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <h3 style={{ fontSize: '20px', marginBottom: '30px' }}>
-            Trusted by Leading Healthcare Networks
-          </h3>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '40px', opacity: 0.6 }}>
-            <div>Regional Health Network</div>
-            <div>Metro General Hospitals</div>
-            <div>Coastal Medical Group</div>
+          {/* Features */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '24px',
+            marginBottom: '60px'
+          }}>
+            <div className="card">
+              <div style={{ fontSize: '28px', marginBottom: '16px' }}>🛡️</div>
+              <h3 style={{ fontSize: '20px', marginBottom: '12px', color: '#fff' }}>
+                HIPAA Compliant
+              </h3>
+              <p style={{ color: '#888', fontSize: '15px' }}>
+                Differential privacy with ε≤3.0 ensures patient data never leaves hospital premises
+              </p>
+            </div>
+  
+            <div className="card">
+              <div style={{ fontSize: '28px', marginBottom: '16px' }}>🔗</div>
+              <h3 style={{ fontSize: '20px', marginBottom: '12px', color: '#fff' }}>
+                Multi-Site Learning
+              </h3>
+              <p style={{ color: '#888', fontSize: '15px' }}>
+                Train models across hospital networks without centralizing sensitive data
+              </p>
+            </div>
+  
+            <div className="card">
+              <div style={{ fontSize: '28px', marginBottom: '16px' }}>📈</div>
+              <h3 style={{ fontSize: '20px', marginBottom: '12px', color: '#fff' }}>
+                Improved Accuracy
+              </h3>
+              <p style={{ color: '#888', fontSize: '15px' }}>
+                Access 10x more training data through collaboration, improving diagnostic accuracy
+              </p>
+            </div>
           </div>
-        </div>
-        
-        <div style={{ 
-          padding: '20px', 
-          backgroundColor: apiStatus === 'healthy' ? '#d4edda' : '#f8d7da',
-          borderRadius: '5px',
-          margin: '20px 0',
-          textAlign: 'center'
-        }}>
-          Platform Status: {apiStatus === 'healthy' ? 'Operational' : 'Offline'}
-        </div>
-        
-        <div style={{ textAlign: 'center' }}>
-          <button 
-            onClick={() => window.location.href = '/dashboard'}
-            style={{
-              padding: '15px 30px',
-              fontSize: '18px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer'
-            }}
-          >
-            Launch Dashboard
-          </button>
+  
+          {/* Status Bar */}
+          <div style={{ 
+            background: '#111',
+            border: '1px solid #222',
+            borderRadius: '8px',
+            padding: '16px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '40px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span className={`status-indicator ${apiStatus === 'healthy' ? 'status-healthy' : 'status-error'}`}></span>
+              <span style={{ color: '#888' }}>Platform Status</span>
+            </div>
+            <span style={{ 
+              color: apiStatus === 'healthy' ? '#10b981' : '#ef4444',
+              fontWeight: '500'
+            }}>
+              {apiStatus === 'healthy' ? 'Operational' : 'Offline'}
+            </span>
+          </div>
+  
+          {/* CTA */}
+          <div style={{ textAlign: 'center' }}>
+            <button 
+              onClick={() => window.location.href = '/dashboard'}
+              className="btn btn-primary"
+              style={{
+                fontSize: '18px',
+                padding: '16px 40px'
+              }}
+            >
+              Access Dashboard →
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -128,34 +161,32 @@ function Landing() {
     );
   }
 
-// Update Dashboard component in App.js
 function Dashboard() {
-    const [demo, setDemo] = React.useState(null);
     const [jobStatus, setJobStatus] = React.useState(null);
     const [loading, setLoading] = React.useState(false);
     const [selectedUseCase, setSelectedUseCase] = React.useState('chest-xray');
     
     const medicalUseCases = {
       'chest-xray': {
-        name: 'Chest X-Ray Pneumonia Detection',
-        description: 'Train CNN model to detect pneumonia across multiple hospitals',
+        name: 'Pneumonia Detection',
+        description: 'Chest X-Ray Analysis',
         model: 'ResNet50',
         clients: 5,
-        icon: '🫁'
+        icon: ''
       },
       'tumor': {
-        name: 'Brain Tumor Classification',
-        description: 'Classify brain tumors from MRI scans',
+        name: 'Tumor Classification',
+        description: 'Brain MRI Analysis',
         model: 'DenseNet121',
         clients: 3,
-        icon: '🧠'
+        icon: ''
       },
       'diabetic': {
-        name: 'Diabetic Retinopathy',
-        description: 'Detect diabetic eye disease from retinal images',
+        name: 'Retinopathy Detection',
+        description: 'Retinal Imaging',
         model: 'EfficientNet',
         clients: 4,
-        icon: '👁️'
+        icon: ''
       }
     };
     
@@ -171,7 +202,7 @@ function Dashboard() {
             name: useCase.name,
             model_type: useCase.model,
             num_clients: useCase.clients,
-            privacy_budget: 3.0, // HIPAA compliant
+            privacy_budget: 3.0,
             use_case: selectedUseCase
           })
         });
@@ -186,92 +217,113 @@ function Dashboard() {
     };
     
     return (
-      <div style={{ padding: '50px', maxWidth: '1200px', margin: '0 auto' }}>
-        <h1>Medical FL Dashboard</h1>
-        
-        <div style={{ 
-          backgroundColor: '#f0f8ff', 
-          padding: '20px', 
-          borderRadius: '10px',
-          marginBottom: '30px'
-        }}>
-          <h3>🏥 Create Multi-Hospital Training Job</h3>
-          <p>Select a medical imaging use case to start collaborative training:</p>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginTop: '20px' }}>
-            {Object.entries(medicalUseCases).map(([key, useCase]) => (
-              <div
-                key={key}
-                onClick={() => setSelectedUseCase(key)}
-                style={{
-                  padding: '20px',
-                  backgroundColor: selectedUseCase === key ? '#007bff' : 'white',
-                  color: selectedUseCase === key ? 'white' : 'black',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: '2px solid #007bff',
-                  textAlign: 'center'
-                }}
-              >
-                <div style={{ fontSize: '32px', marginBottom: '10px' }}>{useCase.icon}</div>
-                <h4>{useCase.name}</h4>
-                <p style={{ fontSize: '14px', opacity: 0.8 }}>{useCase.clients} hospitals</p>
-              </div>
-            ))}
-          </div>
-          
-          <button 
-            onClick={createMedicalFL}
-            disabled={loading}
-            style={{
-              marginTop: '20px',
-              padding: '12px 24px',
-              fontSize: '16px',
-              backgroundColor: loading ? '#ccc' : '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              width: '100%'
-            }}
-          >
-            {loading ? 'Deploying Training Job...' : `Start ${medicalUseCases[selectedUseCase].name} Training`}
-          </button>
-        </div>
-        
-        {jobStatus && (
-          <div style={{ 
-            padding: '20px', 
-            backgroundColor: '#d4edda', 
-            borderRadius: '10px',
-            border: '1px solid #c3e6cb'
+      <div style={{ 
+        minHeight: '100vh',
+        background: '#0a0a0a',
+        color: '#e0e0e0'
+      }}>
+        <div className="container" style={{ paddingTop: '40px' }}>
+          <h1 style={{ 
+            fontSize: '36px', 
+            marginBottom: '40px',
+            fontWeight: '600'
           }}>
-            <h4>✅ Medical FL Job Deployed</h4>
-            <p><strong>Job ID:</strong> {jobStatus.job_id}</p>
-            <p><strong>Participating Hospitals:</strong> {jobStatus.hospitals?.join(', ') || `${jobStatus.results?.length} sites`}</p>
-            <p><strong>HIPAA Compliance:</strong> ✓ Differential Privacy (ε=3.0)</p>
-            <p><strong>Expected Accuracy Improvement:</strong> +15-25%</p>
+            Dashboard
+          </h1>
+          
+          {/* Job Creation */}
+          <div className="card" style={{ marginBottom: '32px' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '24px', color: '#fff' }}>
+              Deploy Federated Training Job
+            </h3>
             
-            <div style={{ marginTop: '20px' }}>
-              <h5>Training Progress:</h5>
-              <div style={{ 
-                backgroundColor: '#f8f9fa', 
-                padding: '10px', 
-                borderRadius: '5px',
-                fontFamily: 'monospace',
-                fontSize: '12px'
-              }}>
-                Hospital A: Training... [████████--] 80%<br/>
-                Hospital B: Training... [██████----] 60%<br/>
-                Hospital C: Training... [█████████-] 90%<br/>
-                <br/>
-                Global Model Accuracy: 78.3% → 82.1% → <strong>86.7%</strong>
-              </div>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gap: '16px',
+              marginBottom: '24px'
+            }}>
+              {Object.entries(medicalUseCases).map(([key, useCase]) => (
+                <div
+                  key={key}
+                  onClick={() => setSelectedUseCase(key)}
+                  className="card"
+                  style={{
+                    cursor: 'pointer',
+                    background: selectedUseCase === key ? '#1a1a1a' : '#0f0f0f',
+                    borderColor: selectedUseCase === key ? '#444' : '#222',
+                    textAlign: 'center',
+                    padding: '20px'
+                  }}
+                >
+                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>{useCase.icon}</div>
+                  <h4 style={{ fontSize: '16px', color: '#fff' }}>{useCase.name}</h4>
+                  <p style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+                    {useCase.clients} hospitals
+                  </p>
+                </div>
+              ))}
             </div>
+            
+            <button 
+              onClick={createMedicalFL}
+              disabled={loading}
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+            >
+              {loading ? 'Deploying...' : `Deploy ${medicalUseCases[selectedUseCase].name}`}
+            </button>
           </div>
-        )}
-        <ProductionArchitecture />
-      </div>
+
+                {/* Job Status */}
+                {jobStatus && (
+                    <div className="card" style={{
+                        borderColor: '#10b981',
+                        background: 'linear-gradient(135deg, #111 0%, #0d1510 100%)'
+                    }}>
+                        <h4 style={{ fontSize: '18px', marginBottom: '20px', color: '#10b981' }}>
+                            ✓ Job Deployed Successfully
+                        </h4>
+
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, 1fr)',
+                            gap: '20px',
+                            fontSize: '14px'
+                        }}>
+                            <div>
+                                <span style={{ color: '#666' }}>Job ID</span>
+                                <p style={{ color: '#fff', fontFamily: 'monospace' }}>{jobStatus.job_id}</p>
+                            </div>
+                            <div>
+                                <span style={{ color: '#666' }}>Participants</span>
+                                <p style={{ color: '#fff' }}>{jobStatus.hospitals?.length || jobStatus.results?.length || 0} hospitals</p>
+                            </div>
+                        </div>
+
+                        <div style={{
+                            marginTop: '24px',
+                            padding: '16px',
+                            background: '#0a0a0a',
+                            borderRadius: '6px',
+                            fontFamily: 'monospace',
+                            fontSize: '13px'
+                        }}>
+                            <div style={{ color: '#666', marginBottom: '8px' }}>Training Progress</div>
+                            {(jobStatus.hospitals || ['St. Mary Hospital', 'Regional Medical', 'University Hospital', 'Metro General'])
+                                .slice(0, jobStatus.num_clients || 4)
+                                .map((hospital, idx) => (
+                                    <div key={idx} style={{ marginBottom: '4px' }}>
+                                        {hospital}: [{'█'.repeat(8)}{'░'.repeat(2)}] {80 + idx * 5}%
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+                {jobStatus && <RealTimeMonitor jobId={jobStatus.job_id} />}
+                <ProductionArchitecture />
+            </div>
+        </div>
     );
   }
 

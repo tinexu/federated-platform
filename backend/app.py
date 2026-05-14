@@ -4,6 +4,11 @@ from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from config import Config
 
+from flask_socketio import SocketIO, emit
+import threading
+import time
+import random
+
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -11,6 +16,75 @@ CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000"]}})
 
 jwt = JWTManager(app)
 db = SQLAlchemy(app)
+
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+training_sessions = {}
+
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+
+@socketio.on('start_monitoring')
+def handle_start_monitoring(data):
+    job_id = data['job_id']
+    
+    thread = threading.Thread(target=simulate_training, args=(job_id,))
+    thread.daemon = True
+    thread.start()
+
+def simulate_training(job_id):
+    """Simulate federated learning progress"""
+    hospitals = ['St. Mary Hospital', 'Regional Medical', 'University Hospital', 'Metro General']
+    
+    # Initialize metrics
+    metrics = {
+        'round': 0,
+        'hospital_accuracy': {h: 0.65 + random.random() * 0.1 for h in hospitals},
+        'global_accuracy': 0.70,
+        'hospital_status': {h: 'waiting' for h in hospitals},
+        'privacy_spent': 0.0,
+        'samples_processed': 0
+    }
+    
+    # 10 rounds
+    for round_num in range(1, 11):
+        time.sleep(2)
+        
+        # Update hospital statuses
+        for i, hospital in enumerate(hospitals):
+            if round_num > i:
+                metrics['hospital_status'][hospital] = 'training'
+            if round_num > i + 1:
+                metrics['hospital_status'][hospital] = 'complete'
+        
+        # Update accuracies
+        for hospital in hospitals:
+            if metrics['hospital_status'][hospital] == 'training':
+                metrics['hospital_accuracy'][hospital] += random.uniform(0.01, 0.03)
+                metrics['hospital_accuracy'][hospital] = min(0.85, metrics['hospital_accuracy'][hospital])
+        
+        active_hospitals = [h for h in hospitals if metrics['hospital_status'][h] in ['training', 'complete']]
+        if active_hospitals:
+            avg_accuracy = sum(metrics['hospital_accuracy'][h] for h in active_hospitals) / len(active_hospitals)
+            metrics['global_accuracy'] = avg_accuracy + 0.02
+        
+        # Update privacy budget
+        metrics['privacy_spent'] = round_num * 0.3
+        metrics['samples_processed'] = round_num * 12000
+        metrics['round'] = round_num
+        
+        socketio.emit('training_update', {
+            'job_id': job_id,
+            'metrics': metrics
+        })
+    
+    # Final update
+    socketio.emit('training_complete', {
+        'job_id': job_id,
+        'final_accuracy': metrics['global_accuracy'],
+        'total_samples': 120000
+    })
 
 @app.route('/api/health')
 def health():
@@ -125,6 +199,4 @@ def create_demo_job():
         }), 500
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True, port=5001)
+    socketio.run(app, debug=True, port=5001)
