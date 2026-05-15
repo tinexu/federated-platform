@@ -1,18 +1,3 @@
-"""
-Federated Learning Coordinator Service.
-
-Manages training rounds, accepts client registrations, collects model updates,
-performs aggregation, and broadcasts the global model.
-
-Endpoints:
-    POST /register          - Client registers with the coordinator
-    GET  /global_model      - Client pulls the current global model
-    GET  /round_info        - Client checks current round status
-    POST /submit_update     - Client submits trained model weights
-    GET  /health            - Health check
-    GET  /metrics           - Training metrics (for dashboard / debugging)
-"""
-
 # real http server using flask
 # flow of one round:
 # 1. all 5 clients POST to /register on startup and once 5 are registered coordinator sets the round status to training
@@ -24,6 +9,23 @@ Endpoints:
 
 # threading.Lock bc flask is concurrent (two clients submit at the same time)so critical section needs to be protected
 # federated averaging function adapted to work with base64-encoded weights from http instead of in-memory dicts
+
+"""
+Federated Learning Coordinator Service.
+
+Manages training rounds, accepts client registrations, collects model updates,
+performs aggregation, and broadcasts the global model.
+
+Endpoints:
+    POST /register          - Client registers with the coordinator
+    GET  /global_model      - Client pulls the current global model
+    GET  /round_info        - Client checks current round status
+    POST /submit_update     - Client submits trained model weights
+    POST /heartbeat         - Client heartbeat (liveness signal)
+    GET  /health            - Health check
+    GET  /status            - Node liveness table
+    GET  /metrics           - Training metrics (for dashboard / debugging)
+"""
 
 import os
 import time
@@ -50,25 +52,63 @@ app = Flask(__name__)
 # coordinator state
 NUM_CLIENTS = int(os.environ.get("NUM_CLIENTS", 5))
 NUM_ROUNDS = int(os.environ.get("NUM_ROUNDS", 10))
-ROUND_TIMEOUT = int(os.environ.get("ROUND_TIMEOUT", 300))  # seconds
+ROUND_TIMEOUT = int(os.environ.get("ROUND_TIMEOUT", 300))
+SUSPECT_TIMEOUT = int(os.environ.get("SUSPECT_TIMEOUT", protocol.SUSPECT_TIMEOUT))
+DEAD_TIMEOUT = int(os.environ.get("DEAD_TIMEOUT", protocol.DEAD_TIMEOUT))
 
 global_model = SimpleNet()
 current_round = 0
-round_status = protocol.ROUND_WAITING  # waiting for clients to register
+round_status = protocol.ROUND_WAITING
 
-# registered clients: {client_id: {"registered_at": ts}}
+# registered clients
 clients = {}
 
-# updates received for the current round: {client_id: {"weights_b64": ..., "data_size": ...}}
+# updates received for the current round
 round_updates = {}
 
-# history of global accuracy per round (filled by clients reporting eval)
+# history
 metrics_history = []
 
 lock = threading.Lock()
 
 
-# aggregation function
+# liveness tracking
+def get_client_liveness(client_info):
+    """Determine liveness status based on last heartbeat."""
+    now = time.time()
+    elapsed = now - client_info["last_heartbeat"]
+    if elapsed < SUSPECT_TIMEOUT:
+        return protocol.CLIENT_ALIVE
+    elif elapsed < DEAD_TIMEOUT:
+        return protocol.CLIENT_SUSPECTED
+    else:
+        return protocol.CLIENT_DEAD
+
+
+def liveness_checker():
+    """Background thread that periodically updates client liveness."""
+    while True:
+        time.sleep(5)
+        with lock:
+            for cid, info in clients.items():
+                old_status = info["liveness"]
+                new_status = get_client_liveness(info)
+                if new_status != old_status:
+                    info["liveness"] = new_status
+                    if new_status == protocol.CLIENT_SUSPECTED:
+                        log.warning("Client '%s' is SUSPECTED (no heartbeat for %ds).",
+                                    cid, SUSPECT_TIMEOUT)
+                    elif new_status == protocol.CLIENT_DEAD:
+                        log.error("Client '%s' is DEAD (no heartbeat for %ds).",
+                                  cid, DEAD_TIMEOUT)
+
+
+# start the liveness checker thread
+checker_thread = threading.Thread(target=liveness_checker, daemon=True)
+checker_thread.start()
+
+
+# aggregation
 def federated_averaging(updates):
     """Weighted FedAvg over submitted client updates."""
     weight_list = []
@@ -91,13 +131,18 @@ def maybe_aggregate():
     """Check if all expected updates arrived; if so, aggregate and advance."""
     global current_round, round_status, round_updates
 
-    expected = len(clients)
+    # only count alive or suspected clients as expected
+    alive_clients = [
+        cid for cid, info in clients.items()
+        if info["liveness"] in (protocol.CLIENT_ALIVE, protocol.CLIENT_SUSPECTED)
+    ]
+    expected = len(alive_clients)
     received = len(round_updates)
 
     if received >= expected and expected > 0:
         log.info(
-            "Round %d: received %d/%d updates, aggregating...",
-            current_round, received, expected,
+            "Round %d: received %d/%d updates (from %d alive clients), aggregating...",
+            current_round, received, expected, expected,
         )
         round_status = protocol.ROUND_AGGREGATING
         aggregated = federated_averaging(round_updates)
@@ -106,7 +151,6 @@ def maybe_aggregate():
 
         log.info("Round %d complete. Global model updated.", current_round)
 
-        # Advance to next round (or finish)
         current_round += 1
         round_updates = {}
         if current_round < NUM_ROUNDS:
@@ -123,17 +167,35 @@ def register():
     global round_status, current_round
     data = request.get_json()
     cid = data.get("client_id")
+    now = time.time()
     with lock:
-        clients[cid] = {"registered_at": time.time()}
+        clients[cid] = {
+            "registered_at": now,
+            "last_heartbeat": now,
+            "liveness": protocol.CLIENT_ALIVE,
+        }
         log.info("Client '%s' registered (%d/%d).", cid, len(clients), NUM_CLIENTS)
 
-        # Once all clients register, start round 0
         if len(clients) >= NUM_CLIENTS and round_status == protocol.ROUND_WAITING:
             current_round = 0
             round_status = protocol.ROUND_TRAINING
             log.info("All clients registered. Starting round 0.")
 
     return jsonify({"status": "ok", "client_id": cid})
+
+
+@app.route("/heartbeat", methods=["POST"])
+def heartbeat():
+    data = request.get_json()
+    cid = data.get("client_id")
+    with lock:
+        if cid in clients:
+            old_status = clients[cid]["liveness"]
+            clients[cid]["last_heartbeat"] = time.time()
+            clients[cid]["liveness"] = protocol.CLIENT_ALIVE
+            if old_status != protocol.CLIENT_ALIVE:
+                log.info("Client '%s' came back from %s -> alive.", cid, old_status)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/global_model", methods=["GET"])
@@ -178,7 +240,6 @@ def submit_update():
 
 @app.route("/submit_eval", methods=["POST"])
 def submit_eval():
-    """Clients can optionally report their local eval of the global model."""
     data = request.get_json()
     with lock:
         metrics_history.append({
@@ -194,6 +255,26 @@ def submit_eval():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "healthy", "round": current_round})
+
+
+@app.route("/status", methods=["GET"])
+def status():
+    """Node liveness table -- foundation for the dashboard."""
+    now = time.time()
+    node_status = {}
+    with lock:
+        for cid, info in clients.items():
+            elapsed = now - info["last_heartbeat"]
+            node_status[cid] = {
+                "liveness": info["liveness"],
+                "seconds_since_heartbeat": round(elapsed, 1),
+                "registered_at": info["registered_at"],
+            }
+    return jsonify({
+        "round": current_round,
+        "round_status": round_status,
+        "nodes": node_status,
+    })
 
 
 @app.route("/metrics", methods=["GET"])

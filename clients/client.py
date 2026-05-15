@@ -1,21 +1,23 @@
-"""
-Federated Learning Client Service.
-
-Each client runs as an independent process (one per Docker container)
-On startup it:
-  1. Downloads MNIST and loads its pre-assigned data partition
-  2. Registers with the coordinator
-  3. Enters a loop: pull global model then train locally then submit update
-"""
-
 # transition to making https requests instead of straight calling method on objects
 # main polls /round_info every few seconds and checks if a new round is active and then pulls model, trains, submits, and waits for the next one
 # wait for coordinator handles startup race condition (clients boot before coordinator ready)
 # configuration from env vars lets docker set different values per container
 
+"""
+Federated Learning Client Service.
+
+Each client runs as an independent process (one per Docker container).
+On startup it:
+  1. Downloads MNIST and loads its pre-assigned data partition.
+  2. Registers with the coordinator.
+  3. Starts a heartbeat background thread.
+  4. Enters a loop: pull global model -> train locally -> submit update.
+"""
+
 import os
 import sys
 import time
+import threading
 import logging
 
 import numpy as np
@@ -27,6 +29,7 @@ import torch.optim as optim
 from common.models import SimpleNet
 from common.data_utils import get_mnist_data, get_client_dataloader, load_partition
 from common.serialization import weights_to_base64, base64_to_weights
+from common import protocol
 
 CLIENT_ID = os.environ.get("CLIENT_ID", "client-0")
 
@@ -44,9 +47,26 @@ BATCH_SIZE = int(os.environ.get("BATCH_SIZE", 32))
 LEARNING_RATE = float(os.environ.get("LEARNING_RATE", 0.01))
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 PARTITION_FILE = os.environ.get("PARTITION_FILE", f"/partitions/{CLIENT_ID}.npy")
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", 5))  # seconds between status checks
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", 5))
+HEARTBEAT_INTERVAL = int(os.environ.get("HEARTBEAT_INTERVAL", protocol.HEARTBEAT_INTERVAL))
 
 
+# heartbeat background thread
+def heartbeat_loop():
+    """Send periodic heartbeats to the coordinator."""
+    while True:
+        try:
+            requests.post(
+                f"{COORDINATOR_URL}/heartbeat",
+                json={"client_id": CLIENT_ID},
+                timeout=5,
+            )
+        except Exception:
+            log.warning("Failed to send heartbeat.")
+        time.sleep(HEARTBEAT_INTERVAL)
+
+
+# coordinator communication
 def wait_for_coordinator(max_retries=60):
     """Block until the coordinator is reachable."""
     for i in range(max_retries):
@@ -105,9 +125,10 @@ def submit_eval(round_num, accuracy, loss):
     requests.post(f"{COORDINATOR_URL}/submit_eval", json=payload, timeout=10)
 
 
+# training
 def train_local(model, train_loader, epochs, lr):
     """Train model on local data and return updated weights."""
-    device = torch.device("cpu")  # keep it simple in containers
+    device = torch.device("cpu")
     model.to(device)
     model.train()
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
@@ -146,7 +167,7 @@ def evaluate(model, test_loader):
     return {"loss": total_loss / n, "accuracy": 100.0 * correct / n}
 
 
-# main loop point
+# main loop
 def main():
     log.info("Starting client '%s'.", CLIENT_ID)
 
@@ -164,6 +185,11 @@ def main():
     wait_for_coordinator()
     register()
 
+    # start heartbeat thread
+    hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    hb_thread.start()
+    log.info("Heartbeat thread started (interval=%ds).", HEARTBEAT_INTERVAL)
+
     # training loop
     model = SimpleNet()
     last_completed_round = -1
@@ -171,12 +197,12 @@ def main():
     while True:
         info = get_round_info()
 
-        # check if finished all rounds
+        # check if finished
         if info["round"] >= info["total_rounds"] and info["status"] == "complete":
             log.info("All rounds complete. Shutting down.")
             break
 
-        # check if still round to complete
+        # check if any round to participate in
         if info["status"] == "training" and info["round"] > last_completed_round:
             round_num = info["round"]
             log.info("--- Round %d starting ---", round_num)
@@ -192,8 +218,8 @@ def main():
             resp = submit_update(updated_weights, len(indices), round_num)
             log.info("Submitted update for round %d: %s", round_num, resp.get("status"))
 
-            # evaluate global model after this round for metrics
-            model.set_weights(weights)  # evaluate the pre-training global model
+            # evaluate global model
+            model.set_weights(weights)
             eval_result = evaluate(model, test_loader)
             submit_eval(round_num, eval_result["accuracy"], eval_result["loss"])
             log.info("Round %d eval: accuracy=%.2f%%", round_num, eval_result["accuracy"])
